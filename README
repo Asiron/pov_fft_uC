@@ -1,0 +1,13 @@
+Persistence of Vision Display
+
+Code for microcontroller part of POV project.
+
+Receives data over Bluetooth and saves it in buffer and then once the buffer is full, it sends it over SPI to TLC LED drivers.
+Uses transmission initialization to make sure that it is receiving proper data.
+
+Protocol description:
+
+  FFT algorithm is run with music on PC app using Processings 2.0 Minim library.
+  Data is prepared in 8bit color format and then transformed to 12bit color format, because TLC drivers support 12-bit PWM.
+  255 has to be send 5 times in order to start transmission after that uC waits for a following 180 bytes to print it to LEDs
+
