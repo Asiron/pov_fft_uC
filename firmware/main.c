@@ -4,6 +4,7 @@
 #include <util/atomic.h>
 #include <stdlib.h>
 
+// Definy portów I/O - podłaczenia diod do mikroprocesora
 #define CLOCK (1<<PB1)
 #define DATA (1<<PB2)
 #define BLANK (1<<PB5)
@@ -11,16 +12,10 @@
 
 #define NUM_TLC5947 5
 
-#define ANGLE 120
 
-volatile uint8_t need_to_run, set_white;
-volatile uint8_t j;
 volatile uint8_t buffer[120];
 volatile uint8_t music_buffer[180];
 volatile uint8_t translated_buffer[180];
-volatile uint8_t last_rpm[3];
-volatile uint8_t last_rpm_index = 0;
-volatile uint8_t angle_choose = 0;
 
 volatile uint8_t counter = 0;
 volatile uint8_t music_buffer_ptr = 0;
@@ -29,32 +24,38 @@ volatile uint8_t init_seq[5] = {};
 
 volatile uint8_t display_flag = 0;
 
+// Wyslanie pojedynczego bajtu po interfejsie SPI
 inline void send_led(uint8_t a) {
     SPDR = a;
     // czekaj az sie wysle bufor
     while(!(SPSR & (1<<SPIF)));
 }
 
+// Commit - zatwierdzenie wyslania bajtow na diody
 inline void commit() {
     PORTB |= LATCH | BLANK;
     PORTB &= ~(LATCH | BLANK);
 }
 
+// Interpolacja liniowa z 8 bitowego koloru do 12 bitowego
 inline uint16_t translate(uint8_t a) {
     return (a * 4095) / 255;
 }
 
+// Procedura wyslania 16 bitowego numeru po UARTcie w sposob przyjazny dla czlowieka
+// Zamien liczbę na stringa i wyślij po koleji, zakoncz znakiem nowej linii i powrotu karetki
 void send_debug_number_16bit( uint16_t num){
-    uint16_t i;
     char num_s[6];
     ultoa(num, num_s, 10);
-    for (i=0; i<strlen(num_s); ++i) {
+    for (uint8_t i=0; i<strlen(num_s); ++i) {
         USART_Transmit(num_s[i]);
     }
     USART_Transmit('\n');
     USART_Transmit('\r');
 }
 
+// Procedura wysłania 8 bitowego numeru po UARTcie w sposób przyjazny dla człowieka
+// Zamien liczbę na stringa i wyślij po koleji, zakoncz znakiem nowej linii i powrotu karetki
 void send_debug_number( uint8_t num) {
     char num_s[4];
     itoa(num, num_s, 10);
@@ -65,15 +66,19 @@ void send_debug_number( uint8_t num) {
     USART_Transmit('\r');
     
 }
+// Procedura wysłania po UARTcie - implementacja z aktywnym czekaniem
 void USART_Transmit( uint8_t data ) {
     while ( !( UCSR3A & (1<< UDRE3 )))    ;
     UDR3  = data;
 }
+// Procedura odebrania po UARTcie - implementacja z aktywnym czekaniem
 uint8_t USART_Receive() {
   while ( !( UCSR3A & (1<< RXC3 )) );
   return UDR3 ;
 }
 
+// Procedura wysłania tekstu po UARTcie 
+// Wyslij tekst, znak po znaku i zakoncz znakiem nowej linii i powrotu karetki 
 void send_text(const char* text){
     for(uint8_t i=0; i<strlen(text); ++i)
         USART_Transmit(text[i]);
@@ -81,10 +86,10 @@ void send_text(const char* text){
     USART_Transmit('\r');
 }  
 
-inline uint8_t calc_rpm_avg(){
-    return (last_rpm[0] + last_rpm[1] + last_rpm[2]) / 3 ;
-}
-
+// Wyslanie nie przeksztalconego bufora
+// Zamiast 180 bajtow przekazujemy 120 bajtow ( 40 diod x 8 bitow)
+// I interpolujemy liniowo do 40 diod x 12 bitow = 180 bajtow
+// poniewaz PWM sterownikow są 12 bitowe
 void send_translate() {
     
     static uint8_t mode = 1, to_send = 0;
@@ -109,6 +114,7 @@ void send_translate() {
     }
 }
 
+//Wysylka juz przetlumaczonego bufora 
 void send_translated_buffer(uint8_t* t_buffer){
     uint8_t i;
     for (i=0; i<180; ++i) {
@@ -116,6 +122,7 @@ void send_translated_buffer(uint8_t* t_buffer){
     }
 }
 
+// Translacja samego bufora bez wysylki 
 void translate_buffer(uint8_t* buffer) {
     static uint8_t mode = 1, to_translate = 0;
     uint16_t tmp=0;
@@ -138,31 +145,22 @@ void translate_buffer(uint8_t* buffer) {
     }
 }
 
-ISR(INT7_vect) {
-    last_rpm[last_rpm_index]++;
-    TCNT2 = 0;
-}
-
-ISR(TIMER2_COMPA_vect) {
-    uint8_t i;
-    for (i=0; i<180; ++i) {
-        if (angle_choose == 0)
-            send_led(255);
-        else
-            send_led(0);
-    }
-    commit();
-    angle_choose = !angle_choose;
-}
-
+// Procedura przerwania odbiornika UART
 ISR(USART3_RX_vect) {
 
+    // Zapisz odebrany bajt do zmiennej i tym samym opróżnij bufor
     char read_byte;
     read_byte = UDR3;
 
+    //Zapisz zmienną do sekwencji inicjalizującej transmisje w poprawne miejsce
     init_seq[counter] = read_byte;
 
+
+    // Nie ma transmisji w tym czasie - sprawdzamy init_seq
     if (!transmission_flag) {
+        // Jesli 5 bajtow w init_seq zostalo ustawione na 255
+        // czyli odebralismy 5 kolejnych 0xFF to inicjalizujemy transmisje
+        // W przeciwnym razie nie robimy nic - czekamy na 5 kolejnych 0xFF
         uint8_t escape_flag = 0;
         for( uint8_t i=0; i<5; ++i){
             if (init_seq[i] != 0xFF){
@@ -171,99 +169,79 @@ ISR(USART3_RX_vect) {
             }
         }
         if (!escape_flag)    
-            transmission_flag = 1;
+            transmission_flag = 1;    
     } else {
-
+        // Transmisja własnie trwa
+        // Zapisz odczytany bajt do bufora cyklicznego
+        // Zwieksz indeks zapisu do bufora
+        // Sprawdz czy nie dotarlismy do konca
+        // Jesli tak to wyzeruj indeks, zakoncz transmisje, ustaw flag gotowosci do wyswietlenia danych
+        
         music_buffer[music_buffer_ptr] = read_byte;
         music_buffer_ptr++;
         if (music_buffer_ptr == 180) {
-            music_buffer_ptr = 0;
-            transmission_flag = 0;// ending transmission
+            music_buffer_ptr = 0;  
+            transmission_flag = 0; // ending transmission
             display_flag = 1;
         }
     }
 
+    // Licznik zapisu danych do sekwencji inicjalizujacej - bufor cykliczny 5 bajtowy
     counter++;
     counter %= 5;
 }
 
-/*
-ISR(USART3_RX_vect) {
-    char read_byte;
-    read_byte = UDR3;
-    display_flag = 1;
-}
-*/
 int main(void)
 {
+    // Globalne właczenie przerwan
     sei();
     
-    UCSR3B = (1<< RXEN3) | (1<< TXEN3 ) | (1<<RXCIE1);// | (1<<TXCIE1); //0x18;      //reciever enable , transmitter enable
+    // Inicjalizacja UART'u, właczamy nadajnik i odbiornik oraz przerwanie odbiornika
+    UCSR3B = (1<< RXEN3) | (1<< TXEN3 ) | (1<<RXCIE1);       //reciever enable , transmitter enable
+    // Usart baud rate register - zsynchronizowanie UARTU do czestotliwosci mikroprocesora
     UBRR3H = 0;
     UBRR3L = 8;
    
-    // outputy + SS
+
+    // Ustawienie kierunków portów I/O PB0 jest SS (Chip Select) domyslnie ustawiony
     DDRB |= (CLOCK | DATA | BLANK | LATCH | (1<<PB0));
     // stan niski
     PORTB &= ~(CLOCK | DATA | BLANK | LATCH);
     
-    // SPI
+    // Inicjalizacja interfacu - Serial Peripheral Interface
     SPCR = (1<<SPE) | (1<<MSTR); //| (1<<DORD);
     // max predkoscq
     SPSR = (1<<SPI2X);
     
+    // Wyślij 'szpilkę' na BLANK'a, żeby zatwierdzic wysłane bajty po SPI,
+    // i wyświetlic diody
     // blank na wysoki, diody gasna
     PORTB |= BLANK;
-    // czekamy dwie sekundy
-    //_delay_ms(2000);
     // blank na niski
     PORTB &= ~BLANK;
+
     
     DDRD |= (1<<PD7);
     DDRJ &= ~(1<<PJ5 | 1<<PJ6);
 
+    // Zgas wszystkie diody
     for (uint8_t i = 0; i < 180; i++)
         send_led(0);
     commit();
 
-
+  
     while (1) {
+        // Jesli bufor jest pełny to wyświetla zawartość bufora i zaneguj flage,
+        // żeby nie wyświetlic jej jeszcze raz, czekaj ponownie na flage bufora
         if(display_flag){
+            
+            // wyświetl wszystkie diody
             for(uint8_t i=0; i<180; ++i) {
                 send_led(music_buffer[i]);
             }
             commit();
             display_flag = 0;
         }  
-    }
-
-    uint8_t i;
-     
-    for (i=0; i < 120; i++) {
-       buffer[i] = (i%3==0) ? 255 : 0;
-    }
-    
-    translate_buffer(buffer);
-
-
-    while(1){
-      if (display_flag) {
-          send_translated_buffer(translated_buffer);
-          commit();
-          
-          send_text("Lights on");
-
-
-          display_flag = 0;
-          _delay_ms(200);
-
-      } else {
-          for (i = 0; i < 180; i++)
-              send_led(0);
-          commit();
-      }
-
-
     }
 
     return 0;
