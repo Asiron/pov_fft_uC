@@ -302,6 +302,7 @@ int main(void)
                 commit();
                 _delay_ms(20);
             }
+            display_flag = 0;
         }  
     }
 
