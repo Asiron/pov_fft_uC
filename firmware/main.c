@@ -12,6 +12,7 @@
 
 #define NUM_TLC5947 5
 
+#define scale 180/40
 
 volatile uint8_t buffer[120];
 volatile uint8_t music_buffer[180];
@@ -24,6 +25,9 @@ volatile uint8_t init_seq[5] = {};
 
 volatile uint8_t display_flag = 0;
 
+volatile uint8_t new_buffer[40];
+volatile uint8_t new_buffer_ptr = 0;
+
 // Wyslanie pojedynczego bajtu po interfejsie SPI
 inline void send_led(uint8_t a) {
     SPDR = a;
@@ -33,8 +37,8 @@ inline void send_led(uint8_t a) {
 
 // Commit - zatwierdzenie wyslania bajtow na diody
 inline void commit() {
-    PORTB |= LATCH | BLANK;
-    PORTB &= ~(LATCH | BLANK);
+    PORTB |= LATCH ;
+    PORTB &= ~(LATCH );
 }
 
 // Interpolacja liniowa z 8 bitowego koloru do 12 bitowego
@@ -144,7 +148,7 @@ void translate_buffer(uint8_t* buffer) {
         mode = !mode;
     }
 }
-
+/*
 // Procedura przerwania odbiornika UART
 ISR(USART3_RX_vect) {
 
@@ -190,6 +194,53 @@ ISR(USART3_RX_vect) {
     counter++;
     counter %= 5;
 }
+*/
+
+ISR(USART3_RX_vect) {
+
+    // Zapisz odebrany bajt do zmiennej i tym samym opróżnij bufor
+    char read_byte;
+    read_byte = UDR3;
+
+    //Zapisz zmienną do sekwencji inicjalizującej transmisje w poprawne miejsce
+    init_seq[counter] = read_byte;
+
+
+    // Nie ma transmisji w tym czasie - sprawdzamy init_seq
+    if (!transmission_flag) {
+        // Jesli 5 bajtow w init_seq zostalo ustawione na 255
+        // czyli odebralismy 5 kolejnych 0xFF to inicjalizujemy transmisje
+        // W przeciwnym razie nie robimy nic - czekamy na 5 kolejnych 0xFF
+        uint8_t escape_flag = 0;
+        for( uint8_t i=0; i<5; ++i){
+            if (init_seq[i] != 0xFE){
+                escape_flag = 1;
+                break;
+            }
+        }
+        if (!escape_flag)    
+            transmission_flag = 1;    
+    } else {
+        // Transmisja własnie trwa
+        // Zapisz odczytany bajt do bufora cyklicznego
+        // Zwieksz indeks zapisu do bufora
+        // Sprawdz czy nie dotarlismy do konca
+        // Jesli tak to wyzeruj indeks, zakoncz transmisje, ustaw flag gotowosci do wyswietlenia danych
+        
+        new_buffer[new_buffer_ptr] = read_byte;
+        new_buffer_ptr++;
+        if (new_buffer_ptr == 40) {
+            new_buffer_ptr = 0;  
+            transmission_flag = 0; // ending transmission
+            display_flag = 1;
+        }
+    }
+
+    // Licznik zapisu danych do sekwencji inicjalizujacej - bufor cykliczny 5 bajtowy
+    counter++;
+    counter %= 5;
+}
+
 
 int main(void)
 {
@@ -219,7 +270,6 @@ int main(void)
     PORTB |= BLANK;
     // blank na niski
     PORTB &= ~BLANK;
-
     
     DDRD |= (1<<PD7);
     DDRJ &= ~(1<<PJ5 | 1<<PJ6);
@@ -229,18 +279,29 @@ int main(void)
         send_led(0);
     commit();
 
-  
     while (1) {
         // Jesli bufor jest pełny to wyświetla zawartość bufora i zaneguj flage,
         // żeby nie wyświetlic jej jeszcze raz, czekaj ponownie na flage bufora
         if(display_flag){
-            
+            /*
             // wyświetl wszystkie diody
             for(uint8_t i=0; i<180; ++i) {
                 send_led(music_buffer[i]);
             }
             commit();
             display_flag = 0;
+            */
+
+            for(uint8_t i=0; i<40; ++i) {
+                for(uint8_t j=0; j < 180 - scale*new_buffer[i]; ++j){
+                    send_led(0);
+                }    
+                for(uint8_t j=0; j < scale*new_buffer[i]; ++j){
+                    send_led(255);
+                }
+                commit();
+                _delay_ms(20);
+            }
         }  
     }
 
