@@ -302,9 +302,9 @@ int main(void)
                 }
                 commit();
                 */
-                for(uint8_t j=0; j<new_buffer[i]; ++j){
-                    for(uint8_t k=0; k<120; ++k)
-                        buffer[k] = 0;
+                for(uint8_t k=0; k<120; ++k)
+                   buffer[k] = 0;
+                for(uint8_t j=0; j<2*new_buffer[i]; ++j){
                     buffer[120-3*j] = 255;
                     send_translate();
                     commit();
