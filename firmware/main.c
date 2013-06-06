@@ -302,13 +302,30 @@ int main(void)
                 }
                 commit();
                 */
-                for(uint8_t k=0; k<120; ++k)
-                   buffer[k] = 0;
-                for(uint8_t j=0; j<2*new_buffer[i]; ++j){
+
+                /*for(uint8_t k=0; k<120; ++k)
+                   buffer[k] = 0;  
+                */
+                for(uint8_t j=0; j<40-new_buffer[i]/2; ++j){
+                    for(uint8_t k=0; k<9; ++k){
+                      send_led(0);
+                    }
+                }
+                for(uint8_t j=0; j<new_buffer[i]/2; ++j){
+                    for(uint8_t k=0; k<2; ++k){
+                      send_led(255);
+                      send_led(0b11110000);
+                      send_led(0);
+                      send_led(0);
+                      send_led(0);
+                    }
+                    /*
                     buffer[120-3*j] = 255;
                     send_translate();
+                    */
                     commit();
                 }
+                _delay_ms(1);
             }
             
             // Zgas wszystkie diody
