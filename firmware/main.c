@@ -293,15 +293,29 @@ int main(void)
             */
 
             for(uint8_t i=0; i<40; ++i) {
-                for(uint8_t j=0; j < 180 - scale*new_buffer[i]; ++j){
+                /*
+                for(uint8_t j=0; j < 180 - 2*scale*new_buffer[i]; ++j){
                     send_led(0);
                 }    
-                for(uint8_t j=0; j < scale*new_buffer[i]; ++j){
-                    send_led(255);
+                for(uint8_t j=0; j < 2*scale*new_buffer[i]; ++j){
+                    send_led(0b00001111);
                 }
                 commit();
-                _delay_ms(20);
+                */
+                for(uint8_t j=0; j<new_buffer[i]; ++j){
+                    for(uint8_t k=0; k<120; ++k)
+                        buffer[k] = 0;
+                    buffer[120-3*j] = 255;
+                    send_translate();
+                    commit();
+                }
             }
+            
+            // Zgas wszystkie diody
+            for (uint8_t i = 0; i < 180; i++)
+                send_led(0);
+            commit();
+            
             display_flag = 0;
         }  
     }
