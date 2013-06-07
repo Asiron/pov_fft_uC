@@ -279,8 +279,6 @@ int main(void)
         send_led(0);
     commit();
 
-    uint8_t color = 0;
-    uint8_t color_brightness = 0x0F ;
     while (1) {
         // Jesli bufor jest pełny to wyświetla zawartość bufora i zaneguj flage,
         // żeby nie wyświetlic jej jeszcze raz, czekaj ponownie na flage bufora
@@ -314,88 +312,25 @@ int main(void)
                       send_led(0);
                     }
                 }
-                switch (color) {
-                    case 0: {
-                        for(uint8_t j=0; j < 2*new_buffer[i]; ++j){
-                            if ( mode ) {
-                              send_led((color_brightness << 4) | 0x0F);
-                              send_led(0b11110000);
-                              send_led(0);
-                              send_led(0);
-                              send_led(color_brightness);
-                              mode ^= 1 ;
-                            } else {
-                              send_led(255);
-                              send_led(0);
-                              send_led(0);
-                              send_led(0);
-                              mode ^= 1 ;
-                            }
-                            /*
-                            buffer[120-3*j] = 255;
-                            send_translate();
-                            */
-                            commit();
-                        }
-                        _delay_us(3100);
-                        break;
-                    }
-                    case 1: {
-                        for(uint8_t j=0; j < 2*new_buffer[i]; ++j){
-                            if ( mode ) {
-                              send_led(0);
-                              send_led(color_brightness);
-                              send_led(255);
-                              send_led(0);
-                              send_led(0);
-                              mode ^= 1 ;
-                            } else {
-                              send_led(0);
-                              send_led((color_brightness << 4) | 0x0F);
-                              send_led(0b11110000);
-                              send_led(0);
-                              mode ^= 1 ;
-                            }
-                            /*
-                            buffer[120-3*j] = 255;
-                            send_translate();
-                            */
-                            commit();
-                        }
-                        _delay_us(3100);
-                        break;
-                    }
-                    case 2: {
-                        for(uint8_t j=0; j < 2*new_buffer[i]; ++j){
-                            if ( mode ) {
-                              send_led(0);
-                              send_led(0);
-                              send_led(0);
-                              send_led((color_brightness << 4) | 0x0F);
-                              send_led(0b11110000);
-                              mode ^= 1 ;
-                            } else {
-                              send_led(0);
-                              send_led(0);
-                              send_led(color_brightness);
-                              send_led(255);
-                              mode ^= 1 ;
-                            }
-                            /*
-                            buffer[120-3*j] = 255;
-                            send_translate();
-                            */
-                            commit();
-                        }
-                        _delay_us(3100);
-                        break;
+                for(uint8_t j=0; j < 2*new_buffer[i]; ++j){
+                    if ( mode ) {
+                      send_led(255);
+                      send_led(0b11110000);
+                      send_led(0);
+                      send_led(0);
+                      send_led(0b00001111);
+                      mode ^= 1 ;
+                    } else {
+                      send_led(255);
+                      send_led(0);
+                      send_led(0);
+                      send_led(0);
+                      mode ^= 1 ;
                     }
 
+                    commit();
                 }
-                color_brightness -= 16 ;
-                color_brightness |= 0b00001100; 
-                if ( color_brightness < 0b00001100 ) 
-                    color_brightness = 0x0F; 
+                _delay_us(3100);
             }
             
             // Zgas wszystkie diody
@@ -405,8 +340,6 @@ int main(void)
             
             display_flag = 0;
         }  
-        color++;
-        color %= 3;
     }
 
     return 0;
